@@ -10,7 +10,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel a main run mid-deploy; superseded pull request runs are cancelled.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
@@ -91,3 +92,43 @@ jobs:
           echo
           docker exec api id -un
           docker rm -f api
+
+  deploy:
+    # Only main is deployed, and only after the tests and the Docker check pass.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build-and-test, docker]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://siteledger-hkallem-api-btf6anh0erc4c2g4.canadacentral-01.azurewebsites.net
+    env:
+      APP_URL: https://siteledger-hkallem-api-btf6anh0erc4c2g4.canadacentral-01.azurewebsites.net
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # Framework-dependent and CPU-neutral: the Free F1 plan runs a 32-bit worker.
+      - name: Publish
+        run: dotnet publish src/SiteLedger.Api --configuration Release --output publish
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: siteledger-hkallem-api
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: publish
+
+      - name: Smoke test (live, database, auth required)
+        run: |
+          curl --silent --show-error --fail --retry 20 --retry-delay 6 --retry-all-errors "$APP_URL/health/live"
+          echo
+          # A paused free-tier database can take about a minute to resume.
+          curl --silent --show-error --fail --retry 20 --retry-delay 6 --retry-all-errors "$APP_URL/health/ready"
+          echo
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' "$APP_URL/api/v1/projects")
+          echo "GET /api/v1/projects without a token: $status"
+          test "$status" = 401
