@@ -63,8 +63,10 @@ jobs:
 
       - name: Start API (Release, Production, warnings-only logging)
         run: |
-          ASPNETCORE_ENVIRONMENT=Production ASPNETCORE_URLS=http://localhost:8080 Serilog__MinimumLevel__Default=Warning \
-            nohup dotnet src/SiteLedger.Api/bin/Release/net10.0/SiteLedger.Api.dll > api.log 2>&1 &
+          # Run from the build folder: appsettings.json is read from the current directory.
+          (cd src/SiteLedger.Api/bin/Release/net10.0 && \
+            ASPNETCORE_ENVIRONMENT=Production ASPNETCORE_URLS=http://localhost:8080 Serilog__MinimumLevel__Default=Warning \
+            nohup dotnet SiteLedger.Api.dll > "$GITHUB_WORKSPACE/api.log" 2>&1 &)
           curl --silent --fail --retry 60 --retry-delay 1 --retry-all-errors http://localhost:8080/health/ready
           token="$(dotnet run --project tools/SiteLedger.TokenTool --configuration Release --no-build -- --role Viewer --sub k6 --minutes 120)"
           echo "::add-mask::$token"
@@ -82,6 +84,7 @@ jobs:
       - name: Results
         if: always()
         run: |
+          mkdir -p results
           {
             echo "## k6 results"
             echo "Runner: $(nproc) vCPU, $(free -g | awk '/Mem:/{print $2}') GB RAM, $(lscpu | sed -n 's/^Model name: *//p'); commit ${GITHUB_SHA::7}"
