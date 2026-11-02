@@ -21,6 +21,9 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.Property(p => p.ProjectCode).HasMaxLength(24);
         builder.HasIndex(p => p.ProjectCode).IsUnique();
 
+        // Status-filtered lists and the portfolio report, already in ProjectCode order.
+        builder.HasIndex(p => new { p.Status, p.ProjectCode });
+
         builder.Property(p => p.Name).HasMaxLength(120);
         builder.Property(p => p.RowVersion).IsRowVersion();
     }

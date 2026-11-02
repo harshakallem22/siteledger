@@ -158,7 +158,12 @@ namespace SiteLedger.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ProjectId");
+                    b.HasIndex("ProjectId", "ExpenseDate")
+                        .IsDescending(false, true);
+
+                    b.HasIndex("ProjectId", "Status");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("ProjectId", "Status"), new[] { "AmountUsd" });
 
                     b.ToTable("Expenses", null, t =>
                         {
@@ -212,6 +217,8 @@ namespace SiteLedger.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ProjectCode")
                         .IsUnique();
+
+                    b.HasIndex("Status", "ProjectCode");
 
                     b.ToTable("Projects", null, t =>
                         {
@@ -276,6 +283,13 @@ namespace SiteLedger.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("EmployeeId");
+
+                    b.HasIndex("ProjectId", "Status");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("ProjectId", "Status"), new[] { "LaborCostUsd" });
+
+                    b.HasIndex("ProjectId", "SubmittedAtUtc")
+                        .IsDescending(false, true);
 
                     b.HasIndex("ProjectId", "EmployeeId", "WorkDate")
                         .IsUnique();

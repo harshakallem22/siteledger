@@ -27,5 +27,9 @@ internal sealed class ExpenseConfiguration : IEntityTypeConfiguration<Expense>
         builder.Property(e => e.RowVersion).IsRowVersion();
 
         builder.HasOne<Project>().WithMany().HasForeignKey(e => e.ProjectId).OnDelete(DeleteBehavior.Restrict);
+
+        // Reports sum by project and status straight from this index; lists read a project's newest first.
+        builder.HasIndex(e => new { e.ProjectId, e.Status }).IncludeProperties(e => e.AmountUsd);
+        builder.HasIndex(e => new { e.ProjectId, e.ExpenseDate }).IsDescending(false, true);
     }
 }

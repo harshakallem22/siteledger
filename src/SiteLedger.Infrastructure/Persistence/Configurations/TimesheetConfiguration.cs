@@ -32,5 +32,9 @@ internal sealed class TimesheetConfiguration : IEntityTypeConfiguration<Timeshee
 
         // One timesheet per employee, project and day, enforced by the database (race-proof).
         builder.HasIndex(t => new { t.ProjectId, t.EmployeeId, t.WorkDate }).IsUnique();
+
+        // Reports sum by project and status straight from this index; lists read a project's newest first.
+        builder.HasIndex(t => new { t.ProjectId, t.Status }).IncludeProperties(t => t.LaborCostUsd);
+        builder.HasIndex(t => new { t.ProjectId, t.SubmittedAtUtc }).IsDescending(false, true);
     }
 }
