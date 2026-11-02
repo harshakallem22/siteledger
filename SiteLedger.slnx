@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SiteLedger.Api/SiteLedger.Api.csproj" />
+    <Project Path="src/SiteLedger.Application/SiteLedger.Application.csproj" />
+    <Project Path="src/SiteLedger.Domain/SiteLedger.Domain.csproj" />
+    <Project Path="src/SiteLedger.Infrastructure/SiteLedger.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SiteLedger.IntegrationTests/SiteLedger.IntegrationTests.csproj" />
+    <Project Path="tests/SiteLedger.UnitTests/SiteLedger.UnitTests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/SiteLedger.TokenTool/SiteLedger.TokenTool.csproj" />
+  </Folder>
+</Solution>

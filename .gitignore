@@ -1,0 +1,40 @@
+# Repository policy: only what's needed to build, test and run. The ONLY markdown file allowed is the root README.md.
+*.md
+!/README.md
+docs/
+
+# Personal reference / planning material: NEVER commit
+_reference/
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+secrets.json
+*.pfx
+*.publishsettings
+*.PublishSettings
+*.pubxml
+*.pubxml.user
+
+# .NET build output and IDE state
+**/bin/
+**/obj/
+*.user
+*.suo
+.vs/
+.idea/
+.vscode/
+
+# Tests, coverage, logs, benchmark raw output
+TestResults/
+coverage/
+*.coverage
+coverage.cobertura.xml
+*.trx
+logs/
+*.log
+k6-raw-*.json
+
+# OS noise
+.DS_Store
