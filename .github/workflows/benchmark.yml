@@ -1,0 +1,100 @@
+name: Benchmark
+
+# Same runner, same 10,000-line dataset, same load: first with only the initial schema, then with
+# the reporting indexes. 50 VUs × 30 s, 3 trials per endpoint, after a warm-up.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+  SQL_IMAGE: mcr.microsoft.com/mssql/server:2022-latest
+  BASELINE_MIGRATION: 20261101042230_InitialSchema
+  PROJECT_ID: a0000000-0000-4000-8000-000000000001 # SL-2026-001, one of the busiest seeded projects
+  EF_ARGS: --project src/SiteLedger.Infrastructure --startup-project src/SiteLedger.Api --no-build --configuration Release
+
+jobs:
+  k6:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: grafana/setup-k6-action@v1
+
+      - name: Build
+        run: |
+          dotnet tool restore
+          dotnet build SiteLedger.slnx --configuration Release
+
+      - name: Throwaway credentials for this run
+        run: |
+          sa_password="Bench-$(openssl rand -hex 16)-Aa1!"
+          jwt_key="$(openssl rand -base64 48)"
+          echo "::add-mask::$sa_password"
+          echo "::add-mask::$jwt_key"
+          {
+            echo "SA_PASSWORD=$sa_password"
+            echo "Jwt__SigningKey=$jwt_key"
+            echo "ConnectionStrings__Default=Server=localhost,1433;Database=SiteLedgerBench;User ID=sa;Password=$sa_password;Encrypt=True;TrustServerCertificate=True"
+          } >> "$GITHUB_ENV"
+
+      - name: Start SQL Server
+        run: |
+          docker run -d --name sql -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$SA_PASSWORD" -p 1433:1433 "$SQL_IMAGE"
+          for i in $(seq 1 60); do
+            docker exec sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -b -Q "SELECT 1" -o /dev/null && break
+            sleep 2
+          done
+
+      - name: Baseline schema and 10,000-line seed
+        run: |
+          dotnet dotnet-ef database update "$BASELINE_MIGRATION" $EF_ARGS
+          ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/SiteLedger.Api --configuration Release --no-build --no-launch-profile -- seed
+          docker exec sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -d SiteLedgerBench -W -Q \
+            "SELECT (SELECT COUNT(*) FROM Projects) AS Projects, (SELECT COUNT(*) FROM Timesheets) AS Timesheets, (SELECT COUNT(*) FROM Expenses) AS Expenses"
+
+      - name: Start API (Release, Production, warnings-only logging)
+        run: |
+          ASPNETCORE_ENVIRONMENT=Production ASPNETCORE_URLS=http://localhost:8080 Serilog__MinimumLevel__Default=Warning \
+            nohup dotnet src/SiteLedger.Api/bin/Release/net10.0/SiteLedger.Api.dll > api.log 2>&1 &
+          curl --silent --fail --retry 60 --retry-delay 1 --retry-all-errors http://localhost:8080/health/ready
+          token="$(dotnet run --project tools/SiteLedger.TokenTool --configuration Release --no-build -- --role Viewer --sub k6 --minutes 120)"
+          echo "::add-mask::$token"
+          echo "API_TOKEN=$token" >> "$GITHUB_ENV"
+
+      - name: Run suite (baseline)
+        run: bash tools/perf/run-suite.sh baseline
+
+      - name: Add reporting indexes
+        run: dotnet dotnet-ef database update $EF_ARGS
+
+      - name: Run suite (indexed)
+        run: bash tools/perf/run-suite.sh indexed
+
+      - name: Results
+        if: always()
+        run: |
+          {
+            echo "## k6 results"
+            echo "Runner: $(nproc) vCPU, $(free -g | awk '/Mem:/{print $2}') GB RAM, $(lscpu | sed -n 's/^Model name: *//p'); commit ${GITHUB_SHA::7}"
+            echo "SQL Server: $(docker exec sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -h -1 -W -Q 'SET NOCOUNT ON; SELECT CAST(SERVERPROPERTY(''ProductVersion'') AS nvarchar(30))')"
+            echo
+            python3 tools/perf/summarize.py results
+          } | tee results/summary.md >> "$GITHUB_STEP_SUMMARY"
+          python3 tools/perf/summarize.py results | awk -F'|' 'NR>2 && NF>5 && $4 ~ /[0-9]/ {print "::notice title=k6 " $2 $3 "::" $0}'
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: k6-results
+          path: |
+            results/
+            api.log
