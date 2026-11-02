@@ -55,6 +55,14 @@ jobs:
             -reporttypes:"Html;MarkdownSummaryGithub" -classfilters:"+SiteLedger.Application.Services.*"
           cat coverage/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Publish test counts and coverage as annotations
+        if: always()
+        run: |
+          for trx in TestResults/*.trx; do
+            python3 -c "import re,sys; c=re.search(r'<Counters [^>]*', open(sys.argv[1]).read()).group(0); g=lambda k: re.search(k+r'=\"(\d+)\"', c).group(1); print(f'::notice title=Tests::{sys.argv[1]}: total {g(\"total\")}, passed {g(\"passed\")}, failed {g(\"failed\")}')" "$trx"
+          done
+          echo "::notice title=Coverage::Service layer $(grep -m1 -oE 'Line coverage:[^|]*\| *[0-9.]+%' coverage/SummaryGithub.md | tr -d '|*' | tr -s ' ')"
+
       - uses: actions/upload-artifact@v7
         if: always()
         with:
