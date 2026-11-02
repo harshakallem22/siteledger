@@ -92,7 +92,8 @@ jobs:
             echo
             python3 tools/perf/summarize.py results
           } | tee results/summary.md >> "$GITHUB_STEP_SUMMARY"
-          python3 tools/perf/summarize.py results | awk -F'|' 'NR>2 && NF>5 && $4 ~ /[0-9]/ {print "::notice title=k6 " $2 $3 "::" $0}'
+          # One annotation per schema/endpoint (GitHub shows at most 10 per step).
+          python3 tools/perf/summarize.py results | awk -F'|' '/Median P95/ {m=1; next} m && NF>6 && $5 ~ /[0-9]/ {print "::notice title=k6" $2 $3 "::" $0}'
 
       - uses: actions/upload-artifact@v7
         if: always()

@@ -28,8 +28,9 @@ for (schema, mode), trials in sorted(rows.items()):
         print(f"| {schema} | {mode} | {t['trial']} | {t['p95']:.1f} | {t['p50']:.1f} | {t['p99']:.1f} | {t['requests']} | {t['rps']:.0f} | {t['failed']:.2f} |")
 
 print()
-print("| Schema | Endpoint | Median of the 3 trial P95s (ms) | Total requests | Max failed % |")
-print("|---|---|---|---|---|")
+print("| Schema | Endpoint | P95 per trial (ms) | Median P95 (ms) | Total requests | Max failed % |")
+print("|---|---|---|---|---|---|")
 for (schema, mode), trials in sorted(rows.items()):
-    print(f"| {schema} | {mode} | {statistics.median(t['p95'] for t in trials):.1f} | "
+    per_trial = " / ".join(f"{t['p95']:.1f}" for t in trials)
+    print(f"| {schema} | {mode} | {per_trial} | {statistics.median(t['p95'] for t in trials):.1f} | "
           f"{sum(t['requests'] for t in trials)} | {max(t['failed'] for t in trials):.2f} |")
