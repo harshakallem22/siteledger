@@ -88,7 +88,7 @@ jobs:
           {
             echo "## k6 results"
             echo "Runner: $(nproc) vCPU, $(free -g | awk '/Mem:/{print $2}') GB RAM, $(lscpu | sed -n 's/^Model name: *//p'); commit ${GITHUB_SHA::7}"
-            echo "SQL Server: $(docker exec sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -h -1 -W -Q 'SET NOCOUNT ON; SELECT CAST(SERVERPROPERTY(''ProductVersion'') AS nvarchar(30))')"
+            echo "SQL Server: $(docker exec sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -h -1 -W -Q "SET NOCOUNT ON; SELECT CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(30))")"
             echo
             python3 tools/perf/summarize.py results
           } | tee results/summary.md >> "$GITHUB_STEP_SUMMARY"
