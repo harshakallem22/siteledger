@@ -4,7 +4,7 @@
 
 A REST API for construction project cost tracking: projects and budgets, labor timesheets, expenses, an approval workflow, and budget-versus-actual reports.
 
-Built with **C# / .NET 10, ASP.NET Core, EF Core 10 and SQL Server**.
+Built with **C# / .NET 10, ASP.NET Core, EF Core 10 and SQL Server**, deployed to **Azure App Service**.
 
 ## What it does
 
@@ -123,6 +123,14 @@ docker run -p 8080:8080 \
 ```
 `docker compose up -d --build` runs SQL Server and the API together (x86-64 only; apply the migrations first as in step 4).
 
+## Deployment
+
+Every push to `main` that passes CI is published to **Azure App Service** (Free F1, Windows) backed by an **Azure SQL** database. The pipeline then checks `/health/live`, `/health/ready` (database reachable) and that the API rejects a request without a token.
+
+- Health check: https://siteledger-hkallem-api-btf6anh0erc4c2g4.canadacentral-01.azurewebsites.net/health/ready
+- The API itself needs a token signed with the production key, so it isn't open for public use.
+- Settings (connection string, signing key) live in App Service configuration, never in the repository.
+
 ## Results
 
 Measured on 2026-11-02:
@@ -149,4 +157,4 @@ The benchmark can be re-run from the **Benchmark** workflow in the Actions tab.
 
 - Demo authentication: tokens come from a local tool, not an identity provider. Roles are global; there are no per-project permissions.
 - Not an accounting system: no invoicing, payroll, tax or multi-currency.
-- No cloud deployment is included yet.
+- The deployment uses free tiers: the app sleeps when idle and the database pauses, so the first request can take several seconds. Load tests were run in CI, not against Azure.
