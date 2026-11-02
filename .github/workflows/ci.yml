@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_NOLOGO: 1
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Integration tests start their own SQL Server container (Testcontainers) on this x64 runner.
+      SITELEDGER_TEST_DB: container
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: |
+          dotnet tool restore
+          dotnet restore SiteLedger.slnx
+
+      - name: Build (warnings are errors)
+        run: dotnet build SiteLedger.slnx --configuration Release --no-restore
+
+      - name: Unit tests
+        run: >
+          dotnet test tests/SiteLedger.UnitTests --configuration Release --no-build
+          --collect:"XPlat Code Coverage" --results-directory TestResults --logger trx
+
+      - name: Integration tests (SQL Server via Testcontainers)
+        run: >
+          dotnet test tests/SiteLedger.IntegrationTests --configuration Release --no-build
+          --collect:"XPlat Code Coverage" --results-directory TestResults --logger trx
+
+      - name: Service-layer coverage
+        if: always()
+        run: |
+          dotnet reportgenerator -reports:"TestResults/**/coverage.cobertura.xml" -targetdir:coverage \
+            -reporttypes:"Html;MarkdownSummaryGithub" -classfilters:"+SiteLedger.Application.Services.*"
+          cat coverage/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: test-results-and-coverage
+          path: |
+            TestResults/**/*.trx
+            coverage/
+
+  docker:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build image
+        run: docker build --tag siteledger-api:ci .
+
+      - name: Smoke test (process starts and answers /health/live)
+        run: |
+          docker run -d --name api -p 8080:8080 \
+            -e ConnectionStrings__Default="Server=unused;Database=unused" \
+            -e Jwt__SigningKey="$(openssl rand -base64 48)" \
+            siteledger-api:ci
+          curl --silent --show-error --fail --retry 30 --retry-delay 1 --retry-all-errors http://localhost:8080/health/live
+          echo
+          docker exec api id -un
+          docker rm -f api
